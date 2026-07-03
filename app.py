@@ -15,8 +15,12 @@ ahora_gt = datetime.now(ZONA_GT)
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+# =====================================================================
+# FUNCIÓN DE CARGA CON CACHÉ INTELIGENTE (EVITA EL ERROR 429)
+# =====================================================================
 def cargar_datos(nombre_hoja):
-    return conn.read(worksheet=nombre_hoja, ttl=0)
+    # Guardamos los datos por 10 segundos en memoria para no saturar a Google
+    return conn.read(worksheet=nombre_hoja, ttl=10)
 
 # =====================================================================
 # DICCIONARIO DE BANDERAS

@@ -22,15 +22,21 @@ def cargar_datos(nombre_hoja):
     return conexion.read(worksheet=nombre_hoja)
 
 # =====================================================================
-# DICCIONARIO DE BANDERAS
+# CARGA DINÁMICA DE BANDERAS DESDE GOOGLE SHEETS
 # =====================================================================
-BANDERAS = {
-    "Francia": "🇫🇷", "Paraguay": "🇵🇾", "Canadá": "🇨🇦", "Marruecos": "🇲🇦",
-    "Brasil": "🇧🇷", "Noruega": "🇳🇴", "México": "🇲🇽", "Inglaterra": "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
-    "Portugal": "🇵🇹", "España": "🇪🇸", "EE.UU": "🇺🇸", "EEUU": "🇺🇸", "Bélgica": "🇧🇪",
-    "Suiza": "🇨🇭", "Argentina": "🇦🇷", "Colombia": "🇨🇴", "Ghana": "🇬🇭",
-    "Egipto": "🇪🇬", "Australia": "🇦🇺", "Cabo Verde": "🇨🇻"
-}
+try:
+    df_banderas_sheets = cargar_datos("BANDERAS")
+    # Creamos el diccionario combinando la columna Seleccion y Emoji
+    BANDERAS = dict(zip(df_banderas_sheets["Seleccion"].astype(str).str.strip(), df_banderas_sheets["Emoji"].astype(str).str.strip()))
+except Exception:
+    # Respaldo por si aún no has creado la pestaña en Sheets
+    BANDERAS = {
+        "Francia": "🇫🇷", "Paraguay": "🇵🇾", "Canadá": "🇨🇦", "Marruecos": "🇲🇦",
+        "Brasil": "🇧🇷", "Noruega": "🇳🇴", "México": "🇲🇽", "Inglaterra": "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
+        "Portugal": "🇵🇹", "España": "🇪🇸", "EE.UU": "🇺🇸", "EEUU": "🇺🇸", "Bélgica": "🇧🇪",
+        "Suiza": "🇨🇭", "Argentina": "🇦🇷", "Colombia": "🇨🇴", "Ghana": "🇬🇭",
+        "Egipto": "🇪🇬", "Australia": "🇦🇺", "Cabo Verde": "🇨🇻"
+    }
 
 def obtener_nombre_con_bandera(nombre_equipo):
     nombre_limpio = str(nombre_equipo).strip()
@@ -177,13 +183,11 @@ with tab1:
         eq_a_original = str(fila["EquipoA"]).strip()
         eq_b_original = str(fila["EquipoB"]).strip()
         
-        # Validación anti-errores para el ID del partido
         try:
             id_numerico = int(float(id_partido))
         except (ValueError, TypeError):
             id_numerico = 0
         
-        # Identificar si el partido permite penales (Fase Eliminatoria)
         es_eliminatorio = ("tipo" in df_partidos.columns and str(fila.get("Tipo", "")).lower() == "eliminatorio") or (id_numerico > 48)
         
         palabras_bloqueo = ["por definir", "grupo", "ganador", "perdedor", "p89", "p90", "p91", "p92", "p93", "p94", "p95", "p96", "p97", "p98", "p99", "p100", "p101", "p102"]
@@ -253,7 +257,6 @@ with tab1:
             else:
                 nombre_limpio = str(nombre).strip()
                 
-                # 1. Leer directamente los datos más frescos de la hoja
                 try:
                     df_fresco = conn.read(worksheet="PARTICIPANTES")
                 except Exception:
@@ -262,24 +265,20 @@ with tab1:
                 if df_fresco.empty or "Nombre" not in df_fresco.columns:
                     df_fresco = pd.DataFrame(columns=["Nombre"])
                 
-                # Estructurar columnas que falten
                 for k in pronosticos_usuario.keys():
                     col_p = f"Partido_{k}"
                     if col_p not in df_fresco.columns:
                         df_fresco[col_p] = ""
                 
-                # 2. Localizar fila del usuario por coincidencia exacta
                 fila_usuario_idx = df_fresco[df_fresco["Nombre"].astype(str).str.strip() == nombre_limpio].index
                 
                 if len(fila_usuario_idx) > 0:
-                    # USUARIO EXISTENTE: Modificar exclusivamente sus celdas
                     idx = fila_usuario_idx[0]
                     for k, v in pronosticos_usuario.items():
                         if v is not None:
                             df_fresco.at[idx, f"Partido_{k}"] = v
                     st.success(f"¡Tus pronósticos para {nombre_limpio} han sido actualizados con éxito!")
                 else:
-                    # USUARIO NUEVO: Anexar fila limpia al final
                     nueva_fila = {"Nombre": nombre_limpio}
                     for k, v in pronosticos_usuario.items():
                         if v is not None:
@@ -291,7 +290,6 @@ with tab1:
                 
                 df_fresco = df_fresco.fillna("")
                 
-                # 3. Guardar matriz blindada y limpiar caché local
                 conn.update(worksheet="PARTICIPANTES", data=df_fresco)
                 st.cache_data.clear()
                 

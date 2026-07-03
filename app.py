@@ -82,25 +82,43 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 # PESTAÑA 1: REGISTRAR PRONÓSTICOS (CON BLOQUEO Y BANDERAS)
 # ---------------------------------------------------------------------
 with tab1:
-    st.header("Completa tu Quiniela")
+    st.header("Completa o Actualiza tu Quiniela")
     
     try:
         df_participantes = cargar_datos("Participantes")
     except Exception:
         df_participantes = pd.DataFrame(columns=["Nombre"])
 
-    nombre = st.text_input("Tu Nombre Completo:", placeholder="Ej. Álvaro Torres")
+    # Selección de Modo: Nuevo o Existente
+    tipo_registro = st.radio("¿Qué deseas hacer?", ["✨ Registrarme por primera vez", "🔄 Actualizar mis pronósticos existentes"])
     
+    nombre = ""
+    es_usuario_existente = False
+    
+    if tipo_registro == "✨ Registrarme por primera vez":
+        nombre = st.text_input("Tu Nombre Completo:", placeholder="Ej. Álvaro Torres")
+    else:
+        if not df_participantes.empty and "Nombre" in df_participantes.columns:
+            nombre = st.selectbox("Selecciona tu nombre de la lista:", df_participantes["Nombre"].unique())
+            es_usuario_existente = True
+        else:
+            st.warning("⚠️ No hay ningún usuario registrado todavía. Elige 'Registrarme por primera vez'.")
+
     st.subheader("⚽ Pronósticos disponibles")
-    st.caption("Nota: Los partidos se bloquean automáticamente 5 minutos antes de su inicio.")
+    st.caption("Nota: Los partidos se bloquean automáticamente 5 minutos antes de su inicio y solo se activan cuando los equipos reales están definidos.")
     
     pronosticos_usuario = {}
     al_menos_uno_disponible = False
 
     for _, fila in df_partidos.iterrows():
         id_partido = str(fila["ID"])
+        eq_a_original = str(fila["EquipoA"]).strip()
+        eq_b_original = str(fila["EquipoB"]).strip()
         
-        # Aplicamos la función para obtener los nombres con emojis de banderas
+        # Desbloqueo por etapas: si tiene texto provisional, se congela la casilla
+        palabras_bloqueo = ["por definir", "grupo", "ganador", "perdedor", "p89", "p90", "p91", "p92", "p93", "p94", "p95", "p96", "p97", "p98", "p99", "p100", "p101", "p102"]
+        esta_bloqueado_por_etapa = any(palabra in eq_a_original.lower() or palabra in eq_b_original.lower() for palabra in palabras_bloqueo)
+        
         eq_a_con_bandera = obtener_nombre_con_bandera(fila["EquipoA"])
         eq_b_con_bandera = obtener_nombre_con_bandera(fila["EquipoB"])
         
@@ -109,37 +127,71 @@ with tab1:
         limite_cierre = hora_partido - timedelta(minutes=5)
         
         st.markdown(f"**Partido {id_partido}: {eq_a_con_bandera} vs {eq_b_con_bandera}**")
-        st.caption(f"📅 Cierra: {limite_cierre.strftime('%d/%m/%Y %I:%M %p')}")
         
-        if ahora_gt > limite_cierre:
-            st.warning("🔒 Pronósticos bloqueados para este partido (Tiempo límite alcanzado).")
+        if esta_bloqueado_por_etapa:
+            st.info("⏳ Casilla bloqueada: Esperando a que se definan los equipos clasificados de la siguiente etapa.")
+            pronosticos_usuario[id_partido] = None
+        elif ahora_gt > limite_cierre:
+            st.warning("🔒 Pronósticos cerrados para este partido (Tiempo límite alcanzado).")
             pronosticos_usuario[id_partido] = None
         else:
             al_menos_uno_disponible = True
+            st.caption(f"📅 Cierra: {limite_cierre.strftime('%d/%m/%Y %I:%M %p')}")
+            
+            valor_defecto_a = 0
+            valor_defecto_b = 0
+            col_partido = f"Partido_{id_partido}"
+            
+            # Si actualiza, precargamos sus datos anteriores en las casillas
+            if es_usuario_existente and col_partido in df_participantes.columns:
+                pronostico_anterior = df_participantes.loc[df_participantes["Nombre"] == nombre, col_partido].values
+                if len(pronostico_anterior) > 0 and pd.notna(pronostico_anterior[0]) and "-" in str(pronostico_anterior[0]):
+                    try:
+                        valor_defecto_a, valor_defecto_b = map(int, str(pronostico_anterior[0]).split("-"))
+                    except:
+                        pass
+
             col1, col2 = st.columns(2)
             with col1:
-                g_a = st.number_input(f"Goles {eq_a_con_bandera}", min_value=0, max_value=15, value=0, key=f"in_a_{id_partido}")
+                g_a = st.number_input(f"Goles {eq_a_con_bandera}", min_value=0, max_value=15, value=valor_defecto_a, key=f"in_a_{id_partido}")
             with col2:
-                g_b = st.number_input(f"Goles {eq_b_con_bandera}", min_value=0, max_value=15, value=0, key=f"in_b_{id_partido}")
+                g_b = st.number_input(f"Goles {eq_b_con_bandera}", min_value=0, max_value=15, value=valor_defecto_b, key=f"in_b_{id_partido}")
             pronosticos_usuario[id_partido] = f"{g_a}-{g_b}"
         st.write("---")
 
+    # Botón de guardado/procesamiento integrado
     if al_menos_uno_disponible:
         if st.button("Guardar mi Quiniela 🚀"):
-            if nombre.strip() == "":
-                st.error("❌ Por favor, escribe tu nombre.")
-            elif nombre.strip() in df_participantes["Nombre"].values:
-                st.warning("⚠️ Este nombre ya está registrado.")
+            if str(nombre).strip() == "":
+                st.error("❌ Por favor, ingresa o selecciona un nombre.")
             else:
-                nuevo_registro = {"Nombre": nombre.strip()}
-                for k, v in pronosticos_usuario.items():
-                    if v is not None:
-                        nuevo_registro[f"Partido_{k}"] = v
+                nombre_limpio = str(nombre).strip()
                 
-                df_nuevo = pd.DataFrame([nuevo_registro])
-                df_actualizado = pd.concat([df_participantes, df_nuevo], ignore_index=True)
+                if es_usuario_existente:
+                    idx = df_participantes[df_participantes["Nombre"] == nombre_limpio].index[0]
+                    for k, v in pronosticos_usuario.items():
+                        if v is not None:
+                            col_p = f"Partido_{k}"
+                            if col_p not in df_participantes.columns:
+                                df_participantes[col_p] = None
+                            df_participantes.at[idx, col_p] = v
+                    df_actualizado = df_participantes
+                    st.success(f"¡Tus pronósticos para {nombre_limpio} han sido actualizados!")
+                else:
+                    if nombre_limpio in df_participantes["Nombre"].values:
+                        st.warning("⚠️ Este nombre ya existe. Si quieres cambiar tus apuestas, usa la opción 'Actualizar mis pronósticos existentes'.")
+                        st.stop()
+                        
+                    nuevo_registro = {"Nombre": nombre_limpio}
+                    for k, v in pronosticos_usuario.items():
+                        if v is not None:
+                            nuevo_registro[f"Partido_{k}"] = v
+                    
+                    df_nuevo = pd.DataFrame([nuevo_registro])
+                    df_actualizado = pd.concat([df_participantes, df_nuevo], ignore_index=True)
+                    st.success(f"¡Excelente {nombre_limpio}! Tus pronósticos se guardaron.")
+                
                 conn.update(worksheet="Participantes", data=df_actualizado)
-                st.success("¡Tus pronósticos activos se guardaron con éxito!")
                 st.balloons()
                 st.rerun()
 

@@ -15,9 +15,14 @@ ahora_gt = datetime.now(ZONA_GT)
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# FUNCIÓN DE CARGA CON CACHÉ INTELIGENTE (EVITA EL ERROR 429)
+# =====================================================================
+# FUNCIÓN DE CARGA CON CACHÉ DE VERDAD (EVITA EL ERROR 429)
+# =====================================================================
+@st.cache_data(ttl=60)  # Conserva los datos por 1 minuto para no saturar a Google
 def cargar_datos(nombre_hoja):
-    return conn.read(worksheet=nombre_hoja, ttl=10)
+    # Forzamos una nueva conexión limpia internamente
+    conexion = st.connection("gsheets", type=GSheetsConnection)
+    return conexion.read(worksheet=nombre_hoja)
 
 # =====================================================================
 # DICCIONARIO DE BANDERAS
@@ -285,7 +290,7 @@ with tab1:
 with tab2:
     st.header("📈 Tabla General de la Familia")
     try:
-        st.cache_data.clear() 
+        # ❌ Se eliminó st.cache_data.clear() que causaba el Error 429
         df_pos = cargar_datos("PARTICIPANTES")
         df_res = cargar_datos("RESULTADOS")
         

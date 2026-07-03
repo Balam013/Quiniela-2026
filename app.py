@@ -8,7 +8,7 @@ import pandas as pd
 st.set_page_config(page_title="Quiniela Familiar 2026", page_icon="🏆", layout="centered")
 
 # Conexión segura usando tu archivo de credenciales de Google
-conn = st.connection("gsheets", type=GSheetsConnection, key_file="credenciales.json")
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 # Función crucial: ttl=0 obliga a la app a leer datos en vivo sin usar caché bloqueado
 def cargar_datos(nombre_hoja):

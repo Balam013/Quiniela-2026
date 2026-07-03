@@ -7,7 +7,7 @@ import pytz
 # =====================================================================
 # CONFIGURACIÓN, HORARIOS Y CONEXIÓN
 # =====================================================================
-st.set_page_config(page_title="Quiniela Familiar 2026", page_icon="🏆", layout="centered")
+st.set_page_config(page_title="Quiniela 2026", page_icon="🏆", layout="centered")
 
 # Configurar Zona Horaria de Guatemala
 ZONA_GT = pytz.timezone("America/Guatemala")
@@ -19,11 +19,11 @@ def cargar_datos(nombre_hoja):
     return conn.read(worksheet=nombre_hoja, ttl=0)
 
 # =====================================================================
-# DICCIONARIO DE BANDERAS (AÑADIDO)
+# DICCIONARIO DE BANDERAS
 # =====================================================================
 BANDERAS = {
     "Francia": "🇫🇷", "Paraguay": "🇵🇾", "Canadá": "🇨🇦", "Marruecos": "🇲🇦",
-    "Brasil": "🇧🇷", "Noruega": "🇳🇴", "México": "🇲🇽", "Inglaterra": "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
+    "Brasil": "🇧🇷", "Noruega": "🇳🇴", "México": "🇲🇽", "Inglaterra": "🏴%A0%A1%A0%A7%A0%A5%A0%A7%A0%B7%A0%BF",
     "Portugal": "🇵🇹", "España": "🇪🇸", "EE.UU": "🇺🇸", "EEUU": "🇺🇸", "Bélgica": "🇧🇪",
     "Suiza": "🇨🇭", "Argentina": "🇦🇷", "Colombia": "🇨🇴", "Ghana": "🇬🇭",
     "Egipto": "🇪🇬", "Australia": "🇦🇺", "Cabo Verde": "🇨🇻"
@@ -31,7 +31,6 @@ BANDERAS = {
 
 def obtener_nombre_con_bandera(nombre_equipo):
     nombre_limpio = str(nombre_equipo).strip()
-    # Si el país exacto está en el diccionario, le pega la bandera
     if nombre_limpio in BANDERAS:
         return f"{nombre_limpio} {BANDERAS[nombre_limpio]}"
     return nombre_limpio
@@ -49,7 +48,7 @@ def calcular_puntos(pronostico, resultado_real):
         # 1. Marcador Exacto -> 3 Puntos
         if goles_pro_a == goles_real_a and goles_pro_b == goles_real_b:
             return 3
-        # 2. Acertar Ganador o Empate (pero no el marcador exacto) -> 1 Punto
+        # 2. Acertar Ganador o Empate -> 1 Punto
         elif (goles_pro_a > goles_pro_b and goles_real_a > goles_real_b) or \
              (goles_pro_a < goles_pro_b and goles_real_a < goles_real_b) or \
              (goles_pro_a == goles_pro_b and goles_real_a == goles_real_b):
@@ -59,16 +58,16 @@ def calcular_puntos(pronostico, resultado_real):
     return 0
 
 # =====================================================================
-# CARGAR BASES DE DATOS ESENCIALES (VERSION BLINDADA)
+# CARGAR BASES DE DATOS ESENCIALES (CORREGIDO A MAYÚSCULAS)
 # =====================================================================
 try:
-    df_partidos = cargar_datos("Partidos")  # Columnas: ID, EquipoA, EquipoB, FechaHora
-except Exception:
-    st.error("⚠️ No se pudo conectar con la pestaña 'Partidos' de Google Sheets. Verifica los permisos o el nombre de la hoja.")
+    df_partidos = cargar_datos("PARTIDOS")  
+except Exception as e:
+    st.error(f"⚠️ Error al leer la pestaña PARTIDOS: {e}")
     df_partidos = pd.DataFrame(columns=["ID", "EquipoA", "EquipoB", "FechaHora"])
 
 try:
-    df_resultados = cargar_datos("Resultados") # Columnas: ID, ResultadoReal
+    df_resultados = cargar_datos("RESULTADOS")
 except Exception:
     df_resultados = pd.DataFrame(columns=["ID", "ResultadoReal"])
 
@@ -86,17 +85,16 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 ])
 
 # ---------------------------------------------------------------------
-# PESTAÑA 1: REGISTRAR PRONÓSTICOS (CON BLOQUEO Y BANDERAS)
+# PESTAÑA 1: REGISTRAR / ACTUALIZAR PRONÓSTICOS
 # ---------------------------------------------------------------------
 with tab1:
     st.header("Completa o Actualiza tu Quiniela")
     
     try:
-        df_participantes = cargar_datos("Participantes")
+        df_participantes = cargar_datos("PARTICIPANTES")
     except Exception:
         df_participantes = pd.DataFrame(columns=["Nombre"])
 
-    # Selección de Modo: Nuevo o Existente
     tipo_registro = st.radio("¿Qué deseas hacer?", ["✨ Registrarme por primera vez", "🔄 Actualizar mis pronósticos existentes"])
     
     nombre = ""
@@ -122,7 +120,7 @@ with tab1:
         eq_a_original = str(fila["EquipoA"]).strip()
         eq_b_original = str(fila["EquipoB"]).strip()
         
-        # Desbloqueo por etapas: si tiene texto provisional, se congela la casilla
+        # Desbloqueo por etapas
         palabras_bloqueo = ["por definir", "grupo", "ganador", "perdedor", "p89", "p90", "p91", "p92", "p93", "p94", "p95", "p96", "p97", "p98", "p99", "p100", "p101", "p102"]
         esta_bloqueado_por_etapa = any(palabra in eq_a_original.lower() or palabra in eq_b_original.lower() for palabra in palabras_bloqueo)
         
@@ -149,7 +147,6 @@ with tab1:
             valor_defecto_b = 0
             col_partido = f"Partido_{id_partido}"
             
-            # Si actualiza, precargamos sus datos anteriores en las casillas
             if es_usuario_existente and col_partido in df_participantes.columns:
                 pronostico_anterior = df_participantes.loc[df_participantes["Nombre"] == nombre, col_partido].values
                 if len(pronostico_anterior) > 0 and pd.notna(pronostico_anterior[0]) and "-" in str(pronostico_anterior[0]):
@@ -166,7 +163,6 @@ with tab1:
             pronosticos_usuario[id_partido] = f"{g_a}-{g_b}"
         st.write("---")
 
-    # Botón de guardado/procesamiento integrado
     if al_menos_uno_disponible:
         if st.button("Guardar mi Quiniela 🚀"):
             if str(nombre).strip() == "":
@@ -198,7 +194,7 @@ with tab1:
                     df_actualizado = pd.concat([df_participantes, df_nuevo], ignore_index=True)
                     st.success(f"¡Excelente {nombre_limpio}! Tus pronósticos se guardaron.")
                 
-                conn.update(worksheet="Participantes", data=df_actualizado)
+                conn.update(worksheet="PARTICIPANTES", data=df_actualizado)
                 st.balloons()
                 st.rerun()
 
@@ -206,16 +202,13 @@ with tab1:
 # PESTAÑA 2: TABLA DE POSICIONES
 # ---------------------------------------------------------------------
 with tab2:
-    st.header("📈 Tabla General de la Familia")
+    st.header("📈 Tabla General")
     try:
-        # Forzamos la limpieza de la caché de Streamlit para leer los datos recién guardados
         st.cache_data.clear() 
-        
-        df_pos = cargar_datos("Participantes")
-        df_res = cargar_datos("Resultados")
+        df_pos = cargar_datos("PARTICIPANTES")
+        df_res = cargar_datos("RESULTADOS")
         
         if not df_pos.empty:
-            # Calcular los puntos en tiempo real para cada participante
             puntos_totales = []
             for _, participante in df_pos.iterrows():
                 puntos = 0
@@ -229,14 +222,10 @@ with tab2:
             df_pos["Puntos Totales"] = puntos_totales
             df_pos = df_pos.sort_values(by="Puntos Totales", ascending=False).reset_index(drop=True)
             
-            # Reorganizar columnas para que Nombre y Puntos salgan primero
             columnas_partidos = [c for c in df_pos.columns if "Partido_" in c]
-            # Ordenamos las columnas de los partidos numéricamente (ej. Partido_89, Partido_90...)
             columnas_partidos = sorted(columnas_partidos, key=lambda x: int(x.split("_")[1]) if x.split("_")[1].isdigit() else 0)
             
             columnas_visibles = ["Nombre", "Puntos Totales"] + columnas_partidos
-            
-            # Asegurar que solo se muestren las columnas que realmente existen
             columnas_finales = [c for c in columnas_visibles if c in df_pos.columns]
             
             st.dataframe(df_pos[columnas_finales], use_container_width=True)
@@ -250,13 +239,11 @@ with tab2:
 # ---------------------------------------------------------------------
 with tab3:
     st.header("📅 Calendario Oficial y Equipos Clasificados")
-    st.caption("🔄 Los equipos se actualizan automáticamente según los nombres que pongas en la pestaña 'Partidos' de tu Excel.")
+    st.caption("🔄 Los equipos se actualizan automáticamente según los nombres que pongas en tu Google Sheets.")
     
     for _, fila in df_partidos.iterrows():
-        # Aquí también mostramos las banderas dinámicamente en el calendario
         eq_a_cb = obtener_nombre_con_bandera(fila["EquipoA"])
         eq_b_cb = obtener_nombre_con_bandera(fila["EquipoB"])
-        
         hora_p = datetime.strptime(str(fila["FechaHora"]), "%Y-%m-%d %H:%M").strftime("%d/%m/%Y %I:%M %p")
         st.info(f"**Partido {fila['ID']}** | ⏰ {hora_p} (Hora GT)  \n⚽ **{eq_a_cb} vs {eq_b_cb}**")
 
@@ -266,11 +253,10 @@ with tab3:
 with tab4:
     st.header("📜 Sistema de Puntos")
     st.markdown("""
-    Para que las reglas sean justas para toda la familia, los puntos se calculan de la siguiente manera:
-    
-    * **🎯 3 Puntos (Marcador Exacto):** Si aciertas exactamente la cantidad de goles de ambos equipos. *(Ejemplo: Pronosticaste 2-1 y el juego quedó 2-1).*
-    * **⚽ 1 Punto (Acertar Tendencia):** Si adivinas quién gana o si hay empate, pero no los goles exactos. *(Ejemplo: Pronosticaste 3-0, ganó el equipo pero quedó 1-0).*
-    * **❌ 0 Puntos:** Si no aciertas el resultado ni el ganador/empate.
+    Los puntos se calculan de la siguiente manera de forma automática:
+    * **🎯 3 Puntos (Marcador Exacto):** Si aciertas exactamente los goles de ambos equipos.
+    * **⚽ 1 Punto (Acertar Tendencia):** Si adivinas quién gana o si hay empate, pero no los goles exactos.
+    * **❌ 0 Puntos:** Si no aciertas nada.
     """)
 
 # ---------------------------------------------------------------------
@@ -293,12 +279,12 @@ with tab5:
                 nuevo_res = pd.DataFrame([{"ID": partido_a_actualizar, "ResultadoReal": f"{goles_real_a}-{goles_real_b}"}])
                 
                 try:
-                    df_res_actual = cargar_datos("Resultados")
+                    df_res_actual = cargar_datos("RESULTADOS")
                     df_res_actual = df_res_actual[df_res_actual["ID"].astype(str) != partido_a_actualizar]
                     df_res_final = pd.concat([df_res_actual, nuevo_res], ignore_index=True)
                 except:
                     df_res_final = nuevo_res
                 
-                conn.update(worksheet="Resultados", data=df_res_final)
+                conn.update(worksheet="RESULTADOS", data=df_res_final)
                 st.success(f"¡Marcador del Partido {partido_a_actualizar} actualizado!")
                 st.rerun()

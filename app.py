@@ -201,10 +201,14 @@ with tab1:
 with tab2:
     st.header("📈 Tabla General de la Familia")
     try:
+        # Forzamos la limpieza de la caché de Streamlit para leer los datos recién guardados
+        st.cache_data.clear() 
+        
         df_pos = cargar_datos("Participantes")
         df_res = cargar_datos("Resultados")
         
         if not df_pos.empty:
+            # Calcular los puntos en tiempo real para cada participante
             puntos_totales = []
             for _, participante in df_pos.iterrows():
                 puntos = 0
@@ -218,8 +222,17 @@ with tab2:
             df_pos["Puntos Totales"] = puntos_totales
             df_pos = df_pos.sort_values(by="Puntos Totales", ascending=False).reset_index(drop=True)
             
-            columnas_visibles = ["Nombre", "Puntos Totales"] + [c for c in df_pos.columns if "Partido_" in c]
-            st.dataframe(df_pos[columnas_visibles], use_container_width=True)
+            # Reorganizar columnas para que Nombre y Puntos salgan primero
+            columnas_partidos = [c for c in df_pos.columns if "Partido_" in c]
+            # Ordenamos las columnas de los partidos numéricamente (ej. Partido_89, Partido_90...)
+            columnas_partidos = sorted(columnas_partidos, key=lambda x: int(x.split("_")[1]) if x.split("_")[1].isdigit() else 0)
+            
+            columnas_visibles = ["Nombre", "Puntos Totales"] + columnas_partidos
+            
+            # Asegurar que solo se muestren las columnas que realmente existen
+            columnas_finales = [c for c in columnas_visibles if c in df_pos.columns]
+            
+            st.dataframe(df_pos[columnas_finales], use_container_width=True)
         else:
             st.info("No hay participantes registrados todavía.")
     except Exception as e:

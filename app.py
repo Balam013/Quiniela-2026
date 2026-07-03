@@ -186,9 +186,14 @@ with tab1:
         eq_b_original = str(fila["EquipoB"]).strip()
         
         # Identificar si el partido permite penales (Fase Eliminatoria)
-        # Puedes gestionarlo si la columna 'Tipo' existe o si el ID del partido pertenece a llaves finales (ej: ID > 48)
-        es_eliminatorio = True if ("tipo" in df_partidos.columns and str(fila["Tipo"]).lower() == "eliminatorio") or int(id_partido) > 48 else False
+        # --- AGREGADO: Validación Pro anti-errores para el ID ---
+        try:
+            id_numerico = int(float(id_partido)) # Convierte de forma segura incluso si viene como "49.0"
+        except (ValueError, TypeError):
+            id_numerico = 0 # Si está vacío o es texto, le asigna 0 para que no rompa el código
         
+        # Identificar si el partido permite penales (Fase Eliminatoria)
+        es_eliminatorio = True if ("tipo" in df_partidos.columns and str(fila.get("Tipo", "")).lower() == "eliminatorio") or id_numerico > 48 else False
         palabras_bloqueo = ["por definir", "grupo", "ganador", "perdedor", "p89", "p90", "p91", "p92", "p93", "p94", "p95", "p96", "p97", "p98", "p99", "p100", "p101", "p102"]
         esta_bloqueado_por_etapa = any(palabra in eq_a_original.lower() or palabra in eq_b_original.lower() for palabra in palabras_bloqueo)
         

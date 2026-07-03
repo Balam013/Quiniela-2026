@@ -58,12 +58,19 @@ def calcular_puntos(pronostico, resultado_real):
         pass
     return 0
 
-# Cargar bases de datos esenciales
+# =====================================================================
+# CARGAR BASES DE DATOS ESENCIALES (VERSION BLINDADA)
+# =====================================================================
 try:
     df_partidos = cargar_datos("Partidos")  # Columnas: ID, EquipoA, EquipoB, FechaHora
+except Exception:
+    st.error("⚠️ No se pudo conectar con la pestaña 'Partidos' de Google Sheets. Verifica los permisos o el nombre de la hoja.")
+    df_partidos = pd.DataFrame(columns=["ID", "EquipoA", "EquipoB", "FechaHora"])
+
+try:
     df_resultados = cargar_datos("Resultados") # Columnas: ID, ResultadoReal
 except Exception:
-    st.error("Por favor verifica que las pestañas 'Partidos' y 'Resultados' existan en tu Google Sheet.")
+    df_resultados = pd.DataFrame(columns=["ID", "ResultadoReal"])
 
 # =====================================================================
 # INTERFAZ PRINCIPAL

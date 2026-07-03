@@ -15,12 +15,9 @@ ahora_gt = datetime.now(ZONA_GT)
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# =====================================================================
 # FUNCIÓN DE CARGA CON CACHÉ DE VERDAD (EVITA EL ERROR 429)
-# =====================================================================
-@st.cache_data(ttl=60)  # Conserva los datos por 1 minuto para no saturar a Google
+@st.cache_data(ttl=60)
 def cargar_datos(nombre_hoja):
-    # Forzamos una nueva conexión limpia internamente
     conexion = st.connection("gsheets", type=GSheetsConnection)
     return conexion.read(worksheet=nombre_hoja)
 
@@ -50,7 +47,6 @@ def calcular_puntos(pronostico, resultado_real):
     
     puntos = 0
     try:
-        # 1. Separar marcador y clasificado del Pronóstico ('1-1 | Argentina' o '2-1')
         pronostico_str = str(pronostico).strip()
         clasificado_pro = None
         if "|" in pronostico_str:
@@ -58,12 +54,10 @@ def calcular_puntos(pronostico, resultado_real):
         else:
             marcador_pro = pronostico_str
 
-        # 2. Separar marcador y clasificado del Resultado Real ('1-1 (4-3)' o '2-1')
         res_real_str = str(resultado_real).strip()
         clasificado_real = None
         
         if "(" in res_real_str:
-            # Si hay paréntesis, hubo penales. El ganador de penales se define por quién metió más en el (X-Y)
             marcador_real = res_real_str.split("(")[0].strip()
             penales_str = res_real_str.split("(")[1].replace(")", "").strip()
             pen_a, pen_b = map(int, penales_str.split("-"))
@@ -71,11 +65,9 @@ def calcular_puntos(pronostico, resultado_real):
         else:
             marcador_real = res_real_str
 
-        # Extraer goles para tendencias
         goles_pro_a, goles_pro_b = map(int, marcador_pro.split("-"))
         goles_real_a, goles_real_b = map(int, marcador_real.split("-"))
         
-        # Determinar ganador real en los 90/120 min si no fue por penales
         if clasificado_real is None:
             if goles_real_a > goles_real_b:
                 clasificado_real = "A"
@@ -84,19 +76,16 @@ def calcular_puntos(pronostico, resultado_real):
             else:
                 clasificado_real = "Empate"
 
-        # Evaluar Marcador Regular
         if goles_pro_a == goles_real_a and goles_pro_b == goles_real_b:
-            puntos += 3  # Marcador exacto
+            puntos += 3  
         elif (goles_pro_a > goles_pro_b and goles_real_a > goles_real_b) or \
              (goles_pro_a < goles_pro_b and goles_real_a < goles_real_b) or \
              (goles_pro_a == goles_pro_b and goles_real_a == goles_real_b):
-            puntos += 1  # Tendencia acertada
+            puntos += 1  
 
-        # BONUS PRO: Puntos por acertar quién pasa de ronda en fases eliminatorias
         if clasificado_pro and clasificado_real:
-            # Mapear la selección del usuario ('A' o 'B')
             if (clasificado_pro == "A" and clasificado_real == "A") or (clasificado_pro == "B" and clasificado_real == "B"):
-                puntos += 1 # +1 Punto por pegarle al clasificado
+                puntos += 1 
 
     except:
         pass
@@ -121,17 +110,21 @@ except Exception:
 # =====================================================================
 st.title("🏆 Quiniela Pro 2026")
 
-with st.expander("📖 ¡Haz clic aquí para ver las INSTRUCCIONES DE USO MODO PRO! 🤔", expanded=True):
+# --- MODIFICADO: Instrucciones enfocadas exclusivamente en el uso de la página ---
+with st.expander("📖 ¡Haz clic aquí para ver las INSTRUCCIONES DE USO DE LA PÁGINA! 🤔", expanded=True):
     st.markdown("""
-    ### 🚀 Sistema de Puntuación Avanzado
-    1. **🎯 Marcador Exacto (90'/120'):** **3 Puntos** si le pegas al score del partido regular.
-    2. **⚽ Tendencia acertada:** **1 Punto** si adivinas si gana A, B o empatan.
-    3. **🔥 ¡Bonus de Clasificación! (+1 Punto):** En partidos eliminatorios, si el juego queda empate y se va a penales, sumas **1 punto extra** si adivinaste de antemano qué equipo avanzaba a la siguiente ronda.
+    ### 📱 Guía rápida para navegar por la plataforma:
+    1. **📝 Registrar Pronósticos:** Aquí metes tus marcadores. Si eres nuevo, selecciona *"Registrarme por primera vez"*, escribe tu nombre y confírmalo. Si vas a corregir algún gol de partidos que no han empezado, cambia a *"Actualizar mis pronósticos existentes"* y búscate en la lista. ¡No olvides darle al botón **`Guardar mi Quiniela Pro 🚀`** al final!
+    2. **📊 Tabla de Posiciones:** Revisa el ranking familiar en tiempo real. Aquí verás quién va a la cabeza con sus medallas correspondientes y el desglose de lo que metió cada quien.
+    3. **🔍 Mis Pronósticos:** Tu espacio personal. Selecciona tu nombre en el menú desplegable para auditar toda tu hoja de juego, ver qué marcadores guardaste y verificar cuántos puntos ganaste en cada partido ya jugado.
+    4. **📅 Horario de Partidos:** El calendario oficial con las horas configuradas para Guatemala. Los partidos se cierran automáticamente **5 minutos antes** de su pitazo inicial.
+    5. **📜 Reglas del Juego:** Si tienes dudas de cómo suma el sistema automatizado o el bonus de los penales, dale una leída a esta pestaña.
     """)
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab_consulta, tab3, tab4, tab5 = st.tabs([
     "📝 Registrar Pronósticos", 
     "📊 Tabla de Posiciones", 
+    "🔍 Mis Pronósticos", 
     "📅 Horario de Partidos",
     "📜 Reglas del Juego",
     "⚙️ Administrador"
@@ -185,15 +178,13 @@ with tab1:
         eq_a_original = str(fila["EquipoA"]).strip()
         eq_b_original = str(fila["EquipoB"]).strip()
         
-        # Identificar si el partido permite penales (Fase Eliminatoria)
-        # --- AGREGADO: Validación Pro anti-errores para el ID ---
         try:
-            id_numerico = int(float(id_partido)) # Convierte de forma segura incluso si viene como "49.0"
+            id_numerico = int(float(id_partido))
         except (ValueError, TypeError):
-            id_numerico = 0 # Si está vacío o es texto, le asigna 0 para que no rompa el código
+            id_numerico = 0
         
-        # Identificar si el partido permite penales (Fase Eliminatoria)
         es_eliminatorio = True if ("tipo" in df_partidos.columns and str(fila.get("Tipo", "")).lower() == "eliminatorio") or id_numerico > 48 else False
+        
         palabras_bloqueo = ["por definir", "grupo", "ganador", "perdedor", "p89", "p90", "p91", "p92", "p93", "p94", "p95", "p96", "p97", "p98", "p99", "p100", "p101", "p102"]
         esta_bloqueado_por_etapa = any(palabra in eq_a_original.lower() or palabra in eq_b_original.lower() for palabra in palabras_bloqueo)
         
@@ -221,17 +212,19 @@ with tab1:
             col_partido = f"Partido_{id_partido}"
             
             if es_usuario_existente and col_partido in df_participantes.columns:
-                valor_anterior = str(df_participantes.loc[df_participantes["Nombre"] == nombre, col_partido].values[0])
-                if "-" in valor_anterior:
-                    try:
-                        if "|" in valor_anterior:
-                            marcador_ant, clas_ant = map(str.strip, valor_anterior.split("|"))
-                            valor_defecto_a, valor_defecto_b = map(int, marcador_ant.split("-"))
-                            defecto_clasifica = eq_a_original if clas_ant == "A" else eq_b_original
-                        else:
-                            valor_defecto_a, valor_defecto_b = map(int, valor_anterior.split("-"))
-                    except:
-                        pass
+                val_list = df_participantes.loc[df_participantes["Nombre"] == nombre, col_partido].values
+                if len(val_list) > 0 and pd.notna(val_list[0]):
+                    valor_anterior = str(val_list[0])
+                    if "-" in valor_anterior:
+                        try:
+                            if "|" in valor_anterior:
+                                marcador_ant, clas_ant = map(str.strip, valor_anterior.split("|"))
+                                valor_defecto_a, valor_defecto_b = map(int, marcador_ant.split("-"))
+                                defecto_clasifica = eq_a_original if clas_ant == "A" else eq_b_original
+                            else:
+                                valor_defecto_a, valor_defecto_b = map(int, valor_anterior.split("-"))
+                        except:
+                            pass
 
             col1, col2 = st.columns(2)
             with col1:
@@ -239,7 +232,6 @@ with tab1:
             with col2:
                 g_b = st.number_input(f"Goles {eq_b_con_bandera}", min_value=0, max_value=15, value=valor_defecto_b, key=f"in_b_{id_partido}")
             
-            # MODO PRO EN ACCIÓN: Si los goles son iguales y es fase eliminatoria, obligar a elegir quién pasa
             if es_eliminatorio and g_a == g_b:
                 quien_pasa = st.selectbox(
                     "💥 Se van a penales... ¿Quién clasifica de ronda?", 
@@ -259,43 +251,40 @@ with tab1:
                 st.error("❌ Por favor, ingresa o selecciona un nombre.")
             else:
                 nombre_limpio = str(nombre).strip()
-                
-                if es_usuario_existente:
-                    idx = df_participantes[df_participantes["Nombre"] == nombre_limpio].index[0]
-                    for k, v in pronosticos_usuario.items():
-                        if v is not None:
-                            col_p = f"Partido_{k}"
-                            if col_p not in df_participantes.columns:
-                                df_participantes[col_p] = None
-                            df_participantes.at[idx, col_p] = v
-                    df_actualizado = df_participantes
-                    st.success(f"¡Tus pronósticos para {nombre_limpio} han sido actualizados!")
-                else:
-                    if nombre_limpio in df_participantes["Nombre"].values:
-                        st.warning("⚠️ Este nombre ya existe.")
-                        st.stop()
-                        
-                    nuevo_registro = {"Nombre": nombre_limpio}
-                    for k, v in pronosticos_usuario.items():
-                        if v is not None:
-                            nuevo_registro[f"Partido_{k}"] = v
-                    
-                    df_nuevo = pd.DataFrame([nuevo_registro])
-                    df_actualizado = pd.concat([df_participantes, df_nuevo], ignore_index=True)
+                nuevo_tiro = {"Nombre": nombre_limpio}
+                for k, v in pronosticos_usuario.items():
+                    if v is not None:
+                        nuevo_tiro[f"Partido_{k}"] = v
+                df_nuevo_tiro = pd.DataFrame([nuevo_tiro])
+
+                if df_participantes.empty:
+                    df_actualizado = df_nuevo_tiro
                     st.success(f"¡Excelente {nombre_limpio}! Tus pronósticos se guardaron.")
-                
+                else:
+                    df_participantes.set_index("Nombre", inplace=True)
+                    df_nuevo_tiro.set_index("Nombre", inplace=True)
+
+                    if es_usuario_existente or nombre_limpio in df_participantes.index:
+                        df_participantes.update(df_nuevo_tiro)
+                        st.success(f"¡Tus pronósticos para {nombre_limpio} han sido actualizados!")
+                    else:
+                        df_participantes = pd.concat([df_participantes, df_nuevo_tiro], axis=0)
+                        st.success(f"¡Excelente {nombre_limpio}! Tus pronósticos se guardaron.")
+                    
+                    df_actualizado = df_participantes.reset_index()
+
+                df_actualizado = df_actualizado.fillna("")
                 conn.update(worksheet="PARTICIPANTES", data=df_actualizado)
                 st.session_state["nombre_confirmado"] = ""
                 st.balloons()
                 st.rerun()
 
 # ---------------------------------------------------------------------
-# PESTAÑA 2: TABLA DE POSICIONES (CON MEDALLAS Y EVALUACIÓN PRO)
+# PESTAÑA 2: TABLA DE POSICIONES
 # ---------------------------------------------------------------------
 with tab2:
     st.header("📈 Tabla General de la Familia")
     try:
-        # ❌ Se eliminó st.cache_data.clear() que causaba el Error 429
         df_pos = cargar_datos("PARTICIPANTES")
         df_res = cargar_datos("RESULTADOS")
         
@@ -334,6 +323,62 @@ with tab2:
         st.info("Registra el primer participante para activar la tabla.")
 
 # ---------------------------------------------------------------------
+# 🔍 PESTAÑA: CONSULTAR PRONÓSTICOS INDIVIDUALES
+# ---------------------------------------------------------------------
+with tab_consulta:
+    st.header("🔍 Consultar mis Pronósticos Guardados")
+    try:
+        df_partic = cargar_datos("PARTICIPANTES")
+        df_res_oficial = cargar_datos("RESULTADOS")
+        
+        if not df_partic.empty and "Nombre" in df_partic.columns:
+            usuario_elegido = st.selectbox("Elige tu nombre para ver tu hoja de juego:", df_partic["Nombre"].unique(), key="sb_consulta")
+            
+            fila_usuario = df_partic[df_partic["Nombre"] == usuario_elegido].iloc[0]
+            
+            lista_resumen = []
+            
+            for _, fila_p in df_partidos.iterrows():
+                id_p = str(fila_p["ID"])
+                col_p = f"Partido_{id_p}"
+                
+                eq_a_cb = obtener_nombre_con_bandera(fila_p["EquipoA"])
+                eq_b_cb = obtener_nombre_con_bandera(fila_p["EquipoB"])
+                
+                tiro = fila_usuario.get(col_p, "No registrado")
+                if pd.isna(tiro) or tiro == "":
+                    tiro = "No registrado"
+                
+                tiro_visual = str(tiro)
+                if "|" in str(tiro):
+                    marcador_t, clas_t = map(str.strip, str(tiro).split("|"))
+                    nom_clasifica = fila_p["EquipoA"] if clas_t == "A" else fila_p["EquipoB"]
+                    tiro_visual = f"{marcador_t} (Pasa: {nom_clasifica})"
+                
+                res_oficial_row = df_res_oficial[df_res_oficial["ID"].astype(str) == id_p]
+                res_real_visual = "Pendiente ⏳"
+                puntos_ganados = "-"
+                
+                if not res_oficial_row.empty:
+                    res_real_visual = str(res_oficial_row.iloc[0]["ResultadoReal"])
+                    puntos_ganados = f"{calcular_puntos(tiro, res_real_visual)} pts"
+                
+                lista_resumen.append({
+                    "Partido": f"Partido {id_p}",
+                    "Enfrentamiento": f"{eq_a_cb} vs {eq_b_cb}",
+                    "Tu Pronóstico 🎯": tiro_visual,
+                    "Resultado Real ⚽": res_real_visual,
+                    "Puntos Obtenidos": puntos_ganados
+                })
+                
+            df_resumen_usuario = pd.DataFrame(lista_resumen)
+            st.dataframe(df_resumen_usuario, use_container_width=True, hide_index=True)
+        else:
+            st.info("Aún no hay usuarios para consultar.")
+    except Exception as e:
+        st.info("La tabla de consultas se activará al registrar pronósticos.")
+
+# ---------------------------------------------------------------------
 # PESTAÑA 3: HORARIO DE PARTIDOS
 # ---------------------------------------------------------------------
 with tab3:
@@ -366,7 +411,7 @@ with tab5:
     if password == "FamiliaTorres2026":
         st.success("🔓 Acceso Concedido")
         st.subheader("Ingresar Marcadores Oficiales del Torneo")
-        st.caption("💡 Si el partido se va a penales, escribe el marcador regular y la tanda entre paréntesis. Ejemplo: `1-1 (5-4)`. El sistema sabrá que el primero avanzó.")
+        st.caption("💡 Si el partido se va a penales, escribe el marcador regular y la tanda entre paréntesis. Ejemplo: `1-1 (5-4)`.")
         
         with st.form("form_admin"):
             partido_a_actualizar = st.selectbox("Selecciona el partido jugado:", df_partidos["ID"].astype(str))

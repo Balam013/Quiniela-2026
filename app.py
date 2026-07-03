@@ -1,95 +1,146 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
+from datetime import datetime, timedelta
+import pytz
 
 # =====================================================================
-# CONFIGURACIÓN DE LA PÁGINA Y CONEXIÓN
+# CONFIGURACIÓN, HORARIOS Y CONEXIÓN
 # =====================================================================
 st.set_page_config(page_title="Quiniela Familiar 2026", page_icon="🏆", layout="centered")
 
-# Conexión segura usando tu archivo de credenciales de Google
+# Configurar Zona Horaria de Guatemala
+ZONA_GT = pytz.timezone("America/Guatemala")
+ahora_gt = datetime.now(ZONA_GT)
+
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Función crucial: ttl=0 obliga a la app a leer datos en vivo sin usar caché bloqueado
 def cargar_datos(nombre_hoja):
     return conn.read(worksheet=nombre_hoja, ttl=0)
+
+# =====================================================================
+# DICCIONARIO DE BANDERAS (AÑADIDO)
+# =====================================================================
+BANDERAS = {
+    "Francia": "🇫🇷", "Paraguay": "🇵🇾", "Canadá": "🇨🇦", "Marruecos": "🇲🇦",
+    "Brasil": "🇧🇷", "Noruega": "🇳🇴", "México": "🇲🇽", "Inglaterra": "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
+    "Portugal": "🇵🇹", "España": "🇪🇸", "EE.UU": "🇺🇸", "EEUU": "🇺🇸", "Bélgica": "🇧🇪",
+    "Suiza": "🇨🇭", "Argentina": "🇦🇷", "Colombia": "🇨🇴", "Ghana": "🇬🇭",
+    "Egipto": "🇪🇬", "Australia": "🇦🇺", "Cabo Verde": "🇨🇻"
+}
+
+def obtener_nombre_con_bandera(nombre_equipo):
+    nombre_limpio = str(nombre_equipo).strip()
+    # Si el país exacto está en el diccionario, le pega la bandera
+    if nombre_limpio in BANDERAS:
+        return f"{nombre_limpio} {BANDERAS[nombre_limpio]}"
+    return nombre_limpio
+
+# =====================================================================
+# REGLAS DE PUNTAJE (LÓGICA AUTOMÁTICA)
+# =====================================================================
+def calcular_puntos(pronostico, resultado_real):
+    if pd.isna(pronostico) or pd.isna(resultado_real) or resultado_real == "" or pronostico == "":
+        return 0
+    try:
+        goles_pro_a, goles_pro_b = map(int, pronostico.split("-"))
+        goles_real_a, goles_real_b = map(int, resultado_real.split("-"))
+        
+        # 1. Marcador Exacto -> 3 Puntos
+        if goles_pro_a == goles_real_a and goles_pro_b == goles_real_b:
+            return 3
+        # 2. Acertar Ganador o Empate (pero no el marcador exacto) -> 1 Punto
+        elif (goles_pro_a > goles_pro_b and goles_real_a > goles_real_b) or \
+             (goles_pro_a < goles_pro_b and goles_real_a < goles_real_b) or \
+             (goles_pro_a == goles_pro_b and goles_real_a == goles_real_b):
+            return 1
+    except:
+        pass
+    return 0
+
+# Cargar bases de datos esenciales
+try:
+    df_partidos = cargar_datos("Partidos")  # Columnas: ID, EquipoA, EquipoB, FechaHora
+    df_resultados = cargar_datos("Resultados") # Columnas: ID, ResultadoReal
+except Exception:
+    st.error("Por favor verifica que las pestañas 'Partidos' y 'Resultados' existan en tu Google Sheet.")
 
 # =====================================================================
 # INTERFAZ PRINCIPAL
 # =====================================================================
 st.title("🏆 Quiniela Familiar 2026")
-st.write("¡Ingresa tus pronósticos, suma puntos y demuestra quién sabe más de fútbol!")
 
-# Creamos las pestañas para ordenar la aplicación
-tab1, tab2, tab3 = st.tabs(["📝 Registrar Pronósticos", "📊 Tabla de Posiciones", "⚙️ Administrador"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "📝 Registrar Pronósticos", 
+    "📊 Tabla de Posiciones", 
+    "📅 Horario de Partidos",
+    "📜 Reglas del Juego",
+    "⚙️ Administrador"
+])
 
 # ---------------------------------------------------------------------
-# PESTAÑA 1: REGISTRAR PRONÓSTICOS
+# PESTAÑA 1: REGISTRAR PRONÓSTICOS (CON BLOQUEO Y BANDERAS)
 # ---------------------------------------------------------------------
 with tab1:
     st.header("Completa tu Quiniela")
     
-    # Cargar participantes actuales para verificar si ya existen o crear la estructura
     try:
         df_participantes = cargar_datos("Participantes")
     except Exception:
-        # Si la hoja está vacía, iniciamos con estas columnas por defecto
-        df_participantes = pd.DataFrame(columns=["Nombre", "Puntos", "Partido1", "Partido2"])
+        df_participantes = pd.DataFrame(columns=["Nombre"])
 
-    # Formulario para evitar que la página se recargue con cada número que escribe el usuario
-    with st.form("formulario_quiniela", clear_on_submit=True):
-        nombre = st.text_input("Tu Nombre Completo:", placeholder="Ej. Álvaro Torres")
+    nombre = st.text_input("Tu Nombre Completo:", placeholder="Ej. Álvaro Torres")
+    
+    st.subheader("⚽ Pronósticos disponibles")
+    st.caption("Nota: Los partidos se bloquean automáticamente 5 minutos antes de su inicio.")
+    
+    pronosticos_usuario = {}
+    al_menos_uno_disponible = False
+
+    for _, fila in df_partidos.iterrows():
+        id_partido = str(fila["ID"])
         
-        st.subheader("⚽ Pronósticos de los Partidos")
-        st.write("Escribe cuántos goles crees que anotará cada equipo:")
+        # Aplicamos la función para obtener los nombres con emojis de banderas
+        eq_a_con_bandera = obtener_nombre_con_bandera(fila["EquipoA"])
+        eq_b_con_bandera = obtener_nombre_con_bandera(fila["EquipoB"])
         
-        # --- PARTIDO 1 ---
-        st.markdown("**Partido 1: Equipo A vs Equipo B**")
-        col1, col2 = st.columns(2)
-        with col1:
-            pro_p1_eqA = st.number_input("Goles Equipo A", min_value=0, max_value=20, value=0, key="p1_a")
-        with col2:
-            pro_p1_eqB = st.number_input("Goles Equipo B", min_value=0, max_value=20, value=0, key="p1_b")
-            
-        # --- PARTIDO 2 ---
-        st.markdown("**Partido 2: Equipo C vs Equipo D**")
-        col3, col4 = st.columns(2)
-        with col3:
-            pro_p2_eqC = st.number_input("Goles Equipo C", min_value=0, max_value=20, value=0, key="p2_c")
-        with col4:
-            pro_p2_eqD = st.number_input("Goles Equipo D", min_value=0, max_value=20, value=0, key="p2_d")
-            
-        # Botón de envío del formulario
-        boton_enviar = st.form_submit_button("Guardar mi Quiniela 🚀")
+        # Validar tiempo límite de cierre (5 minutos antes)
+        hora_partido = ZONA_GT.localize(datetime.strptime(str(fila["FechaHora"]), "%Y-%m-%d %H:%M"))
+        limite_cierre = hora_partido - timedelta(minutes=5)
         
-        if boton_enviar:
+        st.markdown(f"**Partido {id_partido}: {eq_a_con_bandera} vs {eq_b_con_bandera}**")
+        st.caption(f"📅 Cierra: {limite_cierre.strftime('%d/%m/%Y %I:%M %p')}")
+        
+        if ahora_gt > limite_cierre:
+            st.warning("🔒 Pronósticos bloqueados para este partido (Tiempo límite alcanzado).")
+            pronosticos_usuario[id_partido] = None
+        else:
+            al_menos_uno_disponible = True
+            col1, col2 = st.columns(2)
+            with col1:
+                g_a = st.number_input(f"Goles {eq_a_con_bandera}", min_value=0, max_value=15, value=0, key=f"in_a_{id_partido}")
+            with col2:
+                g_b = st.number_input(f"Goles {eq_b_con_bandera}", min_value=0, max_value=15, value=0, key=f"in_b_{id_partido}")
+            pronosticos_usuario[id_partido] = f"{g_a}-{g_b}"
+        st.write("---")
+
+    if al_menos_uno_disponible:
+        if st.button("Guardar mi Quiniela 🚀"):
             if nombre.strip() == "":
-                st.error("❌ Por favor, escribe tu nombre antes de enviar.")
+                st.error("❌ Por favor, escribe tu nombre.")
             elif nombre.strip() in df_participantes["Nombre"].values:
-                st.warning(f"⚠️ El nombre '{nombre.strip()}' ya registró una quiniela. Usa un segundo nombre o apellido.")
+                st.warning("⚠️ Este nombre ya está registrado.")
             else:
-                # Darle formato a los pronósticos para guardarlos (Ej: '2-1')
-                pronostico_p1 = f"{pro_p1_eqA}-{pro_p1_eqB}"
-                pronostico_p2 = f"{pro_p2_eqC}-{pro_p2_eqD}"
+                nuevo_registro = {"Nombre": nombre.strip()}
+                for k, v in pronosticos_usuario.items():
+                    if v is not None:
+                        nuevo_registro[f"Partido_{k}"] = v
                 
-                # Crear la nueva fila de datos
-                nuevo_registro = pd.DataFrame([{
-                    "Nombre": nombre.strip(),
-                    "Puntos": 0,  # Inicia con cero puntos
-                    "Partido1": pronostico_p1,
-                    "Partido2": pronostico_p2
-                }])
-                
-                # Combinar datos existentes con el nuevo participante
-                df_actualizado = pd.concat([df_participantes, nuevo_registro], ignore_index=True)
-                
-                # Actualizar la hoja de cálculo de Google de inmediato
+                df_nuevo = pd.DataFrame([nuevo_registro])
+                df_actualizado = pd.concat([df_participantes, df_nuevo], ignore_index=True)
                 conn.update(worksheet="Participantes", data=df_actualizado)
-                
-                st.success(f"¡Excelente {nombre}! Tus pronósticos se guardaron de forma segura en la nube. 📈")
+                st.success("¡Tus pronósticos activos se guardaron con éxito!")
                 st.balloons()
-                
-                # Forzar recarga limpia para actualizar todas las vistas de la app
                 st.rerun()
 
 # ---------------------------------------------------------------------
@@ -98,55 +149,84 @@ with tab1:
 with tab2:
     st.header("📈 Tabla General de la Familia")
     try:
-        df_posiciones = cargar_datos("Participantes")
-        if not df_posiciones.empty:
-            # Ordenar de mayor a menor puntaje
-            df_posiciones = df_posiciones.sort_values(by="Puntos", ascending=False).reset_index(drop=True)
-            st.dataframe(df_posiciones[["Nombre", "Puntos", "Partido1", "Partido2"]], use_container_width=True)
+        df_pos = cargar_datos("Participantes")
+        df_res = cargar_datos("Resultados")
+        
+        if not df_pos.empty:
+            puntos_totales = []
+            for _, participante in df_pos.iterrows():
+                puntos = 0
+                for _, res in df_res.iterrows():
+                    id_p = str(res["ID"])
+                    col_partido = f"Partido_{id_p}"
+                    if col_partido in df_pos.columns:
+                        puntos += calcular_puntos(participante[col_partido], res["ResultadoReal"])
+                puntos_totales.append(puntos)
+            
+            df_pos["Puntos Totales"] = puntos_totales
+            df_pos = df_pos.sort_values(by="Puntos Totales", ascending=False).reset_index(drop=True)
+            
+            columnas_visibles = ["Nombre", "Puntos Totales"] + [c for c in df_pos.columns if "Partido_" in c]
+            st.dataframe(df_pos[columnas_visibles], use_container_width=True)
         else:
-            st.info("Aún no hay nadie registrado. ¡Sé el primero!")
-    except Exception:
-        st.info("La tabla se mostrará en cuanto se registre el primer participante.")
+            st.info("No hay participantes registrados todavía.")
+    except Exception as e:
+        st.info("Registra el primer participante para activar la tabla.")
 
 # ---------------------------------------------------------------------
-# PESTAÑA 3: ADMINISTRADOR (PROTEGIDO CON CONTRASEÑA)
+# PESTAÑA 3: HORARIO DE PARTIDOS
 # ---------------------------------------------------------------------
 with tab3:
-    st.header("🔒 Área Restringida")
+    st.header("📅 Calendario Oficial y Equipos Clasificados")
+    st.caption("🔄 Los equipos se actualizan automáticamente según los nombres que pongas en la pestaña 'Partidos' de tu Excel.")
     
-    # Input de contraseña seguro
-    password = st.text_input("Introduce la contraseña de Administrador para desbloquear:", type="password")
+    for _, fila in df_partidos.iterrows():
+        # Aquí también mostramos las banderas dinámicamente en el calendario
+        eq_a_cb = obtener_nombre_con_bandera(fila["EquipoA"])
+        eq_b_cb = obtener_nombre_con_bandera(fila["EquipoB"])
+        
+        hora_p = datetime.strptime(str(fila["FechaHora"]), "%Y-%m-%d %H:%M").strftime("%d/%m/%Y %I:%M %p")
+        st.info(f"**Partido {fila['ID']}** | ⏰ {hora_p} (Hora GT)  \n⚽ **{eq_a_cb} vs {eq_b_cb}**")
+
+# ---------------------------------------------------------------------
+# PESTAÑA 4: REGLAS DEL JUEGO
+# ---------------------------------------------------------------------
+with tab4:
+    st.header("📜 Sistema de Puntos")
+    st.markdown("""
+    Para que las reglas sean justas para toda la familia, los puntos se calculan de la siguiente manera:
     
-    # Define aquí la clave secreta de tu preferencia
-    CONTRASEÑA_SECRETA = "Torres2026"
+    * **🎯 3 Puntos (Marcador Exacto):** Si aciertas exactamente la cantidad de goles de ambos equipos. *(Ejemplo: Pronosticaste 2-1 y el juego quedó 2-1).*
+    * **⚽ 1 Punto (Acertar Tendencia):** Si adivinas quién gana o si hay empate, pero no los goles exactos. *(Ejemplo: Pronosticaste 3-0, ganó el equipo pero quedó 1-0).*
+    * **❌ 0 Puntos:** Si no aciertas el resultado ni el ganador/empate.
+    """)
+
+# ---------------------------------------------------------------------
+# PESTAÑA 5: ADMINISTRADOR
+# ---------------------------------------------------------------------
+with tab5:
+    st.header("🔒 Panel del Administrador")
+    password = st.text_input("Contraseña de Acceso:", type="password")
     
-    if password == CONTRASEÑA_SECRETA:
-        st.success("🔓 Acceso Concedido como Administrador.")
-        st.subheader("Actualizar Resultados Oficiales de los Partidos")
+    if password == "FamiliaTorres2026":
+        st.success("🔓 Acceso Concedido")
+        st.subheader("Ingresar Marcadores Oficiales del Torneo")
         
-        # Intentar cargar los resultados reales actuales
-        try:
-            df_resultados = cargar_datos("Resultados")
-        except Exception:
-            df_resultados = pd.DataFrame(columns=["Partido", "ResultadoReal"])
+        with st.form("form_admin"):
+            partido_a_actualizar = st.selectbox("Selecciona el partido jugado:", df_partidos["ID"].astype(str))
+            goles_real_a = st.number_input("Goles Reales Equipo A", min_value=0, max_value=20, value=0)
+            goles_real_b = st.number_input("Goles Reales Equipo B", min_value=0, max_value=20, value=0)
             
-        st.write("Define los marcadores finales de los partidos para que el sistema calcule los puntos:")
-        
-        # Inputs para el administrador
-        res_p1 = st.text_input("Resultado Oficial Partido 1 (Formato: 'Ej. 2-1'):")
-        res_p2 = st.text_input("Resultado Oficial Partido 2 (Formato: 'Ej. 0-2'):")
-        
-        if st.button("Publicar Resultados Oficiales y Calcular"):
-            # Crear tabla con los marcadores reales
-            datos_oficiales = pd.DataFrame([
-                {"Partido": "Partido1", "ResultadoReal": res_p1.strip()},
-                {"Partido": "Partido2", "ResultadoReal": res_p2.strip()}
-            ])
-            
-            # Guardar resultados oficiales en su propia pestaña de Google Sheets
-            conn.update(worksheet="Resultados", data=datos_oficiales)
-            st.success("¡Resultados oficiales guardados en Google Sheets!")
-            st.rerun()
-            
-    elif password != "":
-        st.error("❌ Contraseña incorrecta. El acceso al panel de control sigue bloqueado.")
+            if st.form_submit_button("Publicar Resultado Oficial 📢"):
+                nuevo_res = pd.DataFrame([{"ID": partido_a_actualizar, "ResultadoReal": f"{goles_real_a}-{goles_real_b}"}])
+                
+                try:
+                    df_res_actual = cargar_datos("Resultados")
+                    df_res_actual = df_res_actual[df_res_actual["ID"].astype(str) != partido_a_actualizar]
+                    df_res_final = pd.concat([df_res_actual, nuevo_res], ignore_index=True)
+                except:
+                    df_res_final = nuevo_res
+                
+                conn.update(worksheet="Resultados", data=df_res_final)
+                st.success(f"¡Marcador del Partido {partido_a_actualizar} actualizado!")
+                st.rerun()

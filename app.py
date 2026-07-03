@@ -222,7 +222,7 @@ with tab1:
                 st.rerun()
 
 # ---------------------------------------------------------------------
-# PESTAÑA 2: TABLA DE POSICIONES (CORREGIDO: REORGANIZACIÓN Y CIERRE)
+# PESTAÑA 2: TABLA DE POSICIONES (CORREGIDO: MEDALLAS Y OCULTAR ÍNDICE)
 # ---------------------------------------------------------------------
 with tab2:
     st.header("📈 Tabla General de la Familia")
@@ -245,13 +245,23 @@ with tab2:
             df_pos["Puntos Totales"] = puntos_totales
             df_pos = df_pos.sort_values(by="Puntos Totales", ascending=False).reset_index(drop=True)
             
+            # AGREGADO: Lógica de medallas para los 3 primeros puestos
+            for idx in df_pos.index:
+                if idx == 0:
+                    df_pos.at[idx, "Nombre"] = f"🥇 {df_pos.at[idx, 'Nombre']}"
+                elif idx == 1:
+                    df_pos.at[idx, "Nombre"] = f"🥈 {df_pos.at[idx, 'Nombre']}"
+                elif idx == 2:
+                    df_pos.at[idx, "Nombre"] = f"🥉 {df_pos.at[idx, 'Nombre']}"
+            
             columnas_partidos = [c for c in df_pos.columns if "Partido_" in c]
             columnas_partidos = sorted(columnas_partidos, key=lambda x: int(x.split("_")[1]) if x.split("_")[1].isdigit() else 0)
             
             columnas_visibles = ["Nombre", "Puntos Totales"] + columnas_partidos
             columnas_finales = [c for c in columnas_visibles if c in df_pos.columns]
             
-            st.dataframe(df_pos[columnas_finales], use_container_width=True)
+            # MODIFICADO: hide_index=True elimina la columna de números desde 0
+            st.dataframe(df_pos[columnas_finales], use_container_width=True, hide_index=True)
         else:
             st.info("No hay participantes registrados todavía.")
     except Exception as e:

@@ -7,7 +7,7 @@ import pytz
 # =====================================================================
 # CONFIGURACIÓN, HORARIOS Y CONEXIÓN
 # =====================================================================
-st.set_page_config(page_title="Quiniela 2026", page_icon="🏆", layout="centered")
+st.set_page_config(page_title="Quiniela Familiar 2026", page_icon="🏆", layout="centered")
 
 # Configurar Zona Horaria de Guatemala
 ZONA_GT = pytz.timezone("America/Guatemala")
@@ -15,11 +15,8 @@ ahora_gt = datetime.now(ZONA_GT)
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# =====================================================================
 # FUNCIÓN DE CARGA CON CACHÉ INTELIGENTE (EVITA EL ERROR 429)
-# =====================================================================
 def cargar_datos(nombre_hoja):
-    # Guardamos los datos por 10 segundos en memoria para no saturar a Google
     return conn.read(worksheet=nombre_hoja, ttl=10)
 
 # =====================================================================
@@ -101,15 +98,32 @@ with tab1:
 
     tipo_registro = st.radio("¿Qué deseas hacer?", ["✨ Registrarme por primera vez", "🔄 Actualizar mis pronósticos existentes"])
     
+    # Variable de estado para controlar la confirmación con botón sin alterar el flujo original
+    if "nombre_confirmado" not in st.session_state:
+        st.session_state["nombre_confirmado"] = ""
+
     nombre = ""
     es_usuario_existente = False
     
     if tipo_registro == "✨ Registrarme por primera vez":
-        nombre = st.text_input("Tu Nombre Completo:", placeholder="Ej. Álvaro Torres")
+        nombre_input = st.text_input("Tu Nombre Completo:", placeholder="Ej. Álvaro Torres")
+        
+        # AGREGADO: Botón físico para registrar/confirmar el nombre sin presionar Enter
+        if st.button("Confirmar Nombre 👤"):
+            if nombre_input.strip() != "":
+                st.session_state["nombre_confirmado"] = nombre_input.strip()
+                st.success(f"Nombre listo: {st.session_state['nombre_confirmado']}")
+            else:
+                st.error("❌ Por favor, escribe un nombre antes de confirmar.")
+        
+        # Mantenemos el valor ya sea del botón o del comportamiento nativo por Enter
+        nombre = st.session_state["nombre_confirmado"] if st.session_state["nombre_confirmado"] else nombre_input
     else:
         if not df_participantes.empty and "Nombre" in df_participantes.columns:
             nombre = st.selectbox("Selecciona tu nombre de la lista:", df_participantes["Nombre"].unique())
             es_usuario_existente = True
+            # Limpiamos el estado del nombre nuevo al cambiar de modo
+            st.session_state["nombre_confirmado"] = ""
         else:
             st.warning("⚠️ No hay ningún usuario registrado todavía. Elige 'Registrarme por primera vez'.")
 
@@ -199,6 +213,8 @@ with tab1:
                     st.success(f"¡Excelente {nombre_limpio}! Tus pronósticos se guardaron.")
                 
                 conn.update(worksheet="PARTICIPANTES", data=df_actualizado)
+                # Reseteamos el estado para un próximo registro limpio
+                st.session_state["nombre_confirmado"] = ""
                 st.balloons()
                 st.rerun()
 
@@ -206,7 +222,7 @@ with tab1:
 # PESTAÑA 2: TABLA DE POSICIONES
 # ---------------------------------------------------------------------
 with tab2:
-    st.header("📈 Tabla General")
+    st.header("📈 Tabla General de la Familia")
     try:
         st.cache_data.clear() 
         df_pos = cargar_datos("PARTICIPANTES")

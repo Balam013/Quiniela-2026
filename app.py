@@ -7,7 +7,7 @@ import pytz
 # =====================================================================
 # CONFIGURACIÓN, HORARIOS Y CONEXIÓN
 # =====================================================================
-st.set_page_config(page_title="Quiniela Familiar 2026", page_icon="🏆", layout="centered")
+st.set_page_config(page_title="Quiniela 2026", page_icon="🏆", layout="centered")
 
 # Configurar Zona Horaria de Guatemala
 ZONA_GT = pytz.timezone("America/Guatemala")
@@ -75,7 +75,17 @@ except Exception:
 # =====================================================================
 # INTERFAZ PRINCIPAL
 # =====================================================================
-st.title("🏆 Quiniela Familiar 2026")
+st.title("🏆 Quiniela 2026")
+
+# --- AGREGADO: VENTANA DE INSTRUCCIONES DE USO (Desplegable) ---
+with st.expander("📖 ¡Haz clic aquí para ver las INSTRUCCIONES DE USO! 🤔", expanded=True):
+    st.markdown("""
+    ### 🚀 ¿Cómo usar la Quiniela 2026?
+    1. **Si eres nuevo:** Ve a la pestaña **📝 Registrar Pronósticos**, escribe tu nombre completo, presiona el botón **`Confirmar Nombre 👤`**, pon tus marcadores en los partidos activos y haz clic abajo en **`Guardar mi Quiniela 🚀`**.
+    2. **Si quieres actualizar tus goles:** En la misma pestaña, selecciona **`🔄 Actualizar mis pronósticos existentes`**, elige tu nombre de la lista desplegable, cambia tus marcadores y vuelve a presionar el botón de guardar.
+    3. **¿Cuándo se bloquean los partidos?** Los pronósticos cierran de forma estricta **5 minutos antes** de que empiece cada partido. ¡No te confíes!
+    4. **Desbloqueo por etapas:** Los partidos de fases finales aparecerán congelados automáticamente hasta que se definan los equipos reales en el torneo.
+    """)
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📝 Registrar Pronósticos", 
@@ -98,7 +108,6 @@ with tab1:
 
     tipo_registro = st.radio("¿Qué deseas hacer?", ["✨ Registrarme por primera vez", "🔄 Actualizar mis pronósticos existentes"])
     
-    # Variable de estado para controlar la confirmación con botón sin alterar el flujo original
     if "nombre_confirmado" not in st.session_state:
         st.session_state["nombre_confirmado"] = ""
 
@@ -108,7 +117,6 @@ with tab1:
     if tipo_registro == "✨ Registrarme por primera vez":
         nombre_input = st.text_input("Tu Nombre Completo:", placeholder="Ej. Álvaro Torres")
         
-        # AGREGADO: Botón físico para registrar/confirmar el nombre sin presionar Enter
         if st.button("Confirmar Nombre 👤"):
             if nombre_input.strip() != "":
                 st.session_state["nombre_confirmado"] = nombre_input.strip()
@@ -116,13 +124,11 @@ with tab1:
             else:
                 st.error("❌ Por favor, escribe un nombre antes de confirmar.")
         
-        # Mantenemos el valor ya sea del botón o del comportamiento nativo por Enter
         nombre = st.session_state["nombre_confirmado"] if st.session_state["nombre_confirmado"] else nombre_input
     else:
         if not df_participantes.empty and "Nombre" in df_participantes.columns:
             nombre = st.selectbox("Selecciona tu nombre de la lista:", df_participantes["Nombre"].unique())
             es_usuario_existente = True
-            # Limpiamos el estado del nombre nuevo al cambiar de modo
             st.session_state["nombre_confirmado"] = ""
         else:
             st.warning("⚠️ No hay ningún usuario registrado todavía. Elige 'Registrarme por primera vez'.")
@@ -138,14 +144,12 @@ with tab1:
         eq_a_original = str(fila["EquipoA"]).strip()
         eq_b_original = str(fila["EquipoB"]).strip()
         
-        # Desbloqueo por etapas
         palabras_bloqueo = ["por definir", "grupo", "ganador", "perdedor", "p89", "p90", "p91", "p92", "p93", "p94", "p95", "p96", "p97", "p98", "p99", "p100", "p101", "p102"]
         esta_bloqueado_por_etapa = any(palabra in eq_a_original.lower() or palabra in eq_b_original.lower() for palabra in palabras_bloqueo)
         
         eq_a_con_bandera = obtener_nombre_con_bandera(fila["EquipoA"])
         eq_b_con_bandera = obtener_nombre_con_bandera(fila["EquipoB"])
         
-        # Validar tiempo límite de cierre (5 minutos antes)
         hora_partido = ZONA_GT.localize(datetime.strptime(str(fila["FechaHora"]), "%Y-%m-%d %H:%M"))
         limite_cierre = hora_partido - timedelta(minutes=5)
         
@@ -213,13 +217,12 @@ with tab1:
                     st.success(f"¡Excelente {nombre_limpio}! Tus pronósticos se guardaron.")
                 
                 conn.update(worksheet="PARTICIPANTES", data=df_actualizado)
-                # Reseteamos el estado para un próximo registro limpio
                 st.session_state["nombre_confirmado"] = ""
                 st.balloons()
                 st.rerun()
 
 # ---------------------------------------------------------------------
-# PESTAÑA 2: TABLA DE POSICIONES
+# PESTAÑA 2: TABLA DE POSICIONES (CORREGIDO: REORGANIZACIÓN Y CIERRE)
 # ---------------------------------------------------------------------
 with tab2:
     st.header("📈 Tabla General de la Familia")
@@ -284,7 +287,7 @@ with tab4:
 # ---------------------------------------------------------------------
 with tab5:
     st.header("🔒 Panel del Administrador")
-    password = st.text_input("Contraseña de Acceso:", type="password")
+    password = st.text_input("Contraseña de Acceso:", type="password", key="admin_pass")
     
     if password == "FamiliaTorres2026":
         st.success("🔓 Acceso Concedido")

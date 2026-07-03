@@ -184,4 +184,5 @@ with tab1:
         
         es_eliminatorio = True if ("tipo" in df_partidos.columns and str(fila.get("Tipo", "")).lower() == "eliminatorio") or id_numerico > 48 else False
         
-        palabras_bloqueo =
+# Identificar si el partido permite penales (Fase Eliminatoria)
+        es_eliminatorio = ("tipo" in df_partidos.columns and str(fila.get("Tipo", "")).lower() == "eliminatorio") or (id_numerico > 48)

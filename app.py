@@ -387,22 +387,32 @@ with tab5:
     if password == "FamiliaTorres2026":
         st.success("🔓 Acceso Concedido")
         
-        # --- SECCIÓN: LIMPIEZA DE USUARIOS ---
+       # --- SECCIÓN: LIMPIEZA DE USUARIOS ---
         st.subheader("🧹 Mantenimiento de Base de Datos")
-        if st.button("Eliminar Usuarios Duplicados"):
+        
+        # 1. Botón para eliminar duplicados (el que ya teníamos)
+        if st.button("🧹 Eliminar Usuarios Duplicados Automáticamente"):
             df_p = cargar_datos("PARTICIPANTES")
-            # Contar antes
             total_antes = len(df_p)
-            # Eliminar duplicados basándose en el nombre (se queda con la primera ocurrencia)
             df_p = df_p.drop_duplicates(subset=["Nombre"], keep="first")
-            total_despues = len(df_p)
-            
-            if total_antes > total_despues:
+            if total_antes > len(df_p):
                 conn.update(worksheet="PARTICIPANTES", data=df_p.fillna(""))
                 st.cache_data.clear()
-                st.success(f"¡Limpieza exitosa! Se eliminaron {total_antes - total_despues} registros duplicados.")
+                st.success(f"¡Limpieza lista! Se borraron {total_antes - len(df_p)} repetidos.")
             else:
-                st.info("No se encontraron usuarios duplicados.")
+                st.info("No se encontraron duplicados.")
+
+        # 2. Selector para eliminar un participante específico
+        st.write("---")
+        df_p_borrar = cargar_datos("PARTICIPANTES")
+        usuario_a_borrar = st.selectbox("Selecciona un participante para ELIMINAR:", df_p_borrar["Nombre"].unique())
+        
+        if st.button(f"🗑️ ELIMINAR a {usuario_a_borrar}"):
+            df_p_nuevo = df_p_borrar[df_p_borrar["Nombre"] != usuario_a_borrar]
+            conn.update(worksheet="PARTICIPANTES", data=df_p_nuevo.fillna(""))
+            st.cache_data.clear()
+            st.success(f"Usuario {usuario_a_borrar} eliminado permanentemente.")
+            st.rerun()
         
         # --- SECCIÓN: INGRESAR MARCADORES ---
         st.subheader("⚽ Ingresar Marcadores Oficiales")

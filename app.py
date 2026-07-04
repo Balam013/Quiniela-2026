@@ -119,7 +119,7 @@ st.title("🏆 Quiniela Pro 2026")
 with st.expander("📖 ¡Haz clic aquí para ver las INSTRUCCIONES DE USO DE LA PÁGINA! 🤔", expanded=True):
     st.markdown("""
     ### 📱 Guía rápida para navegar por la plataforma:
-    1. **📝 Registrar Pronósticos:** Aquí metes tus marcadores. Si eres nuevo, selecciona *"Registrarme por primera vez"*, escribe tu nombre y confírmalo. Si vas a corregir algún gol de partidos que no han empezado, cambia a *"Actualizar mis pronósticos existentes"* y búscate en la lista. ¡No olvides darle al botón **`Guardar mi Quiniela Pro 🚀`** al final!
+    1. **📝 Registrar Pronósticos:** Aquí metes tus marcadores. Si eres nuevo, selecciona *"Registrarme por primera vez"*, escribe tu nombre y confírmalo. Si vas a corregir algún gol de partidos que no han empezado, cambia a *"Actualizar mis pronósticos existentes"* y búscate en la lista. ¡No olvides darle al botón **`Guardar mis Pronósticos 💾`** al final!
     2. **📊 Tabla de Posiciones:** Revisa el ranking familiar en tiempo real. Aquí verás quién va a la cabeza con sus medallas correspondientes y el desglose de lo que metió cada quien.
     3. **🔍 Mis Pronósticos:** Tu espacio personal. Selecciona tu nombre en el menú desplegable para auditar toda tu hoja de juego, ver qué marcadores guardaste y verificar cuántos puntos ganaste en cada partido ya jugado.
     4. **📅 Horario de Partidos:** El calendario oficial con las horas configuradas para Guatemala. Los partidos se cierran automáticamente **5 minutos antes** de su pitazo inicial.
@@ -256,7 +256,7 @@ with tab1:
             st.balloons()
 
 # ---------------------------------------------------------------------
-# PESTAÑA 2: TABLA DE POSICIONES
+# PESTAÑA 2: TABLA DE POSICIONES (MODIFICADA PARA MOSTRAR PUNTOS POR PARTIDO)
 # ---------------------------------------------------------------------
 with tab2:
     st.header("📈 Tabla General de la Familia")
@@ -265,34 +265,43 @@ with tab2:
         df_res = cargar_datos("RESULTADOS")
         
         if not df_pos.empty:
-            puntos_totales = []
+            # Lista para guardar los datos procesados
+            datos_tabla = []
+            
             for _, participante in df_pos.iterrows():
-                puntos = 0
+                fila_usuario = {"Nombre": participante["Nombre"]}
+                puntos_totales = 0
+                
+                # Iteramos sobre los partidos para calcular puntos individuales
                 for _, res in df_res.iterrows():
                     id_p = str(res["ID"])
                     col_partido = f"Partido_{id_p}"
-                    if col_partido in df_pos.columns:
-                        puntos += calcular_puntos(participante[col_partido], res["ResultadoReal"])
-                puntos_totales.append(puntos)
+                    
+                    # Calculamos los puntos del partido
+                    pts_partido = 0
+                    if col_partido in participante:
+                        pts_partido = calcular_puntos(participante[col_partido], res["ResultadoReal"])
+                    
+                    fila_usuario[f"Puntos_P{id_p}"] = pts_partido
+                    puntos_totales += pts_partido
+                
+                fila_usuario["Puntos Totales"] = puntos_totales
+                datos_tabla.append(fila_usuario)
             
-            df_pos["Puntos Totales"] = puntos_totales
-            df_pos = df_pos.sort_values(by="Puntos Totales", ascending=False).reset_index(drop=True)
+            # Creamos el nuevo DataFrame para mostrar
+            df_final_pos = pd.DataFrame(datos_tabla)
+            df_final_pos = df_final_pos.sort_values(by="Puntos Totales", ascending=False).reset_index(drop=True)
             
-            for idx in df_pos.index:
-                if idx == 0:
-                    df_pos.at[idx, "Nombre"] = f"🥇 {df_pos.at[idx, 'Nombre']}"
-                elif idx == 1:
-                    df_pos.at[idx, "Nombre"] = f"🥈 {df_pos.at[idx, 'Nombre']}"
-                elif idx == 2:
-                    df_pos.at[idx, "Nombre"] = f"🥉 {df_pos.at[idx, 'Nombre']}"
+            # Aplicamos los emojis de medallas
+            for idx in df_final_pos.index:
+                if idx == 0: df_final_pos.at[idx, "Nombre"] = f"🥇 {df_final_pos.at[idx, 'Nombre']}"
+                elif idx == 1: df_final_pos.at[idx, "Nombre"] = f"🥈 {df_final_pos.at[idx, 'Nombre']}"
+                elif idx == 2: df_final_pos.at[idx, "Nombre"] = f"🥉 {df_final_pos.at[idx, 'Nombre']}"
             
-            columnas_partidos = [c for c in df_pos.columns if "Partido_" in c]
-            columnas_partidos = sorted(columnas_partidos, key=lambda x: int(x.split("_")[1]) if x.split("_")[1].isdigit() else 0)
+            # Ordenamos columnas: Nombre, Puntos Totales, y luego los puntos por partido
+            columnas_ordenadas = ["Nombre", "Puntos Totales"] + [c for c in df_final_pos.columns if c.startswith("Puntos_P")]
             
-            columnas_visibles = ["Nombre", "Puntos Totales"] + columnas_partidos
-            columnas_finales = [c for c in columnas_visibles if c in df_pos.columns]
-            
-            st.dataframe(df_pos[columnas_finales], use_container_width=True, hide_index=True)
+            st.dataframe(df_final_pos[columnas_ordenadas], use_container_width=True, hide_index=True)
         else:
             st.info("No hay participantes registrados todavía.")
     except Exception as e:

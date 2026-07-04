@@ -378,7 +378,7 @@ with tab4:
     """)
 
 # ---------------------------------------------------------------------
-# PESTAÑA 5: ADMINISTRADOR
+# PESTAÑA 5: ADMINISTRADOR (CON LIMPIEZA DE DUPLICADOS)
 # ---------------------------------------------------------------------
 with tab5:
     st.header("🔒 Panel del Administrador")
@@ -386,16 +386,32 @@ with tab5:
     
     if password == "FamiliaTorres2026":
         st.success("🔓 Acceso Concedido")
-        st.subheader("Ingresar Marcadores Oficiales del Torneo")
-        st.caption("💡 Si el partido se va a penales, escribe el marcador regular y la tanda entre paréntesis. Ejemplo: `1-1 (5-4)`.")
         
+        # --- SECCIÓN: LIMPIEZA DE USUARIOS ---
+        st.subheader("🧹 Mantenimiento de Base de Datos")
+        if st.button("Eliminar Usuarios Duplicados"):
+            df_p = cargar_datos("PARTICIPANTES")
+            # Contar antes
+            total_antes = len(df_p)
+            # Eliminar duplicados basándose en el nombre (se queda con la primera ocurrencia)
+            df_p = df_p.drop_duplicates(subset=["Nombre"], keep="first")
+            total_despues = len(df_p)
+            
+            if total_antes > total_despues:
+                conn.update(worksheet="PARTICIPANTES", data=df_p.fillna(""))
+                st.cache_data.clear()
+                st.success(f"¡Limpieza exitosa! Se eliminaron {total_antes - total_despues} registros duplicados.")
+            else:
+                st.info("No se encontraron usuarios duplicados.")
+        
+        # --- SECCIÓN: INGRESAR MARCADORES ---
+        st.subheader("⚽ Ingresar Marcadores Oficiales")
         with st.form("form_admin"):
-            partido_a_actualizar = st.selectbox("Selecciona el partido jugado:", df_partidos["ID"].astype(str))
-            marcador_manual = st.text_input("Resultado Real (Ej: '2-1' o '1-1 (4-3)'):", value="0-0")
+            partido_a_actualizar = st.selectbox("Selecciona el partido:", df_partidos["ID"].astype(str))
+            marcador_manual = st.text_input("Resultado Real (Ej: '2-1'):", value="0-0")
             
             if st.form_submit_button("Publicar Resultado Oficial 📢"):
                 nuevo_res = pd.DataFrame([{"ID": partido_a_actualizar, "ResultadoReal": marcador_manual.strip()}])
-                
                 try:
                     df_res_actual = cargar_datos("RESULTADOS")
                     df_res_actual = df_res_actual[df_res_actual["ID"].astype(str) != partido_a_actualizar]
@@ -405,5 +421,5 @@ with tab5:
                 
                 conn.update(worksheet="RESULTADOS", data=df_res_final)
                 st.cache_data.clear()
-                st.success(f"¡Marcador del Partido {partido_a_actualizar} actualizado a '{marcador_manual}'!")
+                st.success(f"¡Marcador actualizado!")
                 st.rerun()

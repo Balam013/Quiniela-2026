@@ -243,7 +243,14 @@ with tab1:
             if len(fila_usuario_idx) > 0:
                 idx = fila_usuario_idx[0]
                 for k, v in pronosticos_usuario.items():
-                    if v is not None: df_fresco.at[idx, f"Partido_{k}"] = v
+                    if v is not None:
+                        col_nombre = f"Partido_{k}"
+                        # --- ESTA ES LA CORRECCIÓN ---
+                        if col_nombre not in df_fresco.columns:
+                            df_fresco[col_nombre] = None
+                        df_fresco[col_nombre] = df_fresco[col_nombre].astype(object)
+                        # ----------------------------
+                        df_fresco.at[idx, col_nombre] = v
             else:
                 nueva_fila = {"Nombre": nombre}
                 for k, v in pronosticos_usuario.items():
